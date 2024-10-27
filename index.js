@@ -9,32 +9,29 @@ const cacheDir = './cache';
 // Переконайтесь, що директорія кешу існує
 fs.mkdir(cacheDir, { recursive: true }).catch(err => console.error('Error creating cache directory:', err));
 
-const fetchImageFromHttpCat = async (code) => {
-    try {
-        const response = await superagent.get(`https://http.cat/${code}`);
-        return response.body; // Повертає картинку
-    } catch (err) {
-        throw new Error('Image not found on http.cat');
-    }
-};
-
 const server = http.createServer(async (req, res) => {
     const code = req.url.substring(1); // Отримуємо код з URL (без слеша)
     const filePath = path.join(cacheDir, `${code}.jpg`);
 
     if (req.method === 'GET') {
         try {
+            // Перевірка наявності файлу в кеші
             const data = await fs.readFile(filePath);
             res.writeHead(200, { 'Content-Type': 'image/jpeg' });
             res.end(data);
         } catch (err) {
-            // Якщо картинка не знайдена в кеші, намагаємось отримати її з http.cat
+            // Якщо файл відсутній в кеші, спробуємо отримати його з сервера http.cat
             try {
-                const httpCatImage = await fetchImageFromHttpCat(code);
-                await fs.writeFile(filePath, httpCatImage); // Зберігаємо в кеш
+                const response = await superagent.get(`https://http.cat/${code}`).buffer(true);
+                const imageData = response.body;
+
+                // Зберігаємо отримане зображення в кеш
+                await fs.writeFile(filePath, imageData);
+                
                 res.writeHead(200, { 'Content-Type': 'image/jpeg' });
-                res.end(httpCatImage);
-            } catch (fetchError) {
+                res.end(imageData);
+            } catch (err) {
+                // Якщо запит завершився помилкою, повертаємо 404
                 res.writeHead(404, { 'Content-Type': 'text/plain' });
                 res.end('Image not found on http.cat.');
             }
